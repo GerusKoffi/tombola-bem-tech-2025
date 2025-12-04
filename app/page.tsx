@@ -181,20 +181,20 @@ export default function HomePage() {
         <div className="container mx-auto px-4">
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-balance">Les lots à gagner</h2>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
-            <PrizeCard icon="📱" title="Coque téléphone premium" number={1} />
-            <PrizeCard icon="🏏" title="Maillet de sport" number={2} />
-            <PrizeCard icon="⌚" title="Montre élégante" number={3} />
-            <PrizeCard icon="👜" title="Accessoires mode" number={4} />
-            <PrizeCard icon="💐" title="Parfum de luxe" number={5} />
-            <PrizeCard icon="🎬" title="Netflix 3 mois" number={6} />
-            <PrizeCard icon="🎵" title="Spotify 6 mois" number={7} />
-            <PrizeCard icon="🎧" title="AirPods" number={8} />
-            <PrizeCard icon="🔋" title="Power bank" number={9} />
-            <PrizeCard icon="🎒" title="Sac à dos premium" number={10} />
-            <PrizeCard icon="📚" title="Kit papeterie" number={11} />
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            <PrizeCard icon="🎧" title="AirPods" number={1} highlight />
+            <PrizeCard icon="📚" title="Bons d'achat Librairies de France" number={2} />
+            <PrizeCard icon="🎵" title="Abonnement Spotify 6 mois" number={3} />
+            <PrizeCard icon="💬" title="Abonnement Snapchat+" number={4} />
+            <PrizeCard icon="💄" title="Paquet beauté pour fille (Gloss, etc)" number={5} />
+            <PrizeCard icon="💐" title="Parfum de luxe" number={6} />
+            <PrizeCard icon="⌚" title="Montre élégante" number={7} />
+            <PrizeCard icon="👜" title="Accessoires mode" number={8} />
+            <PrizeCard icon="🎒" title="Sac à dos premium" number={9} />
+            <PrizeCard icon="🔋" title="Power bank" number={10} />
+            <PrizeCard icon="📱" title="Coque téléphone premium" number={11} />
             <PrizeCard icon="🎁" title="Carte cadeau 100€" number={12} highlight />
-          </div>
+            </div>
         </div>
       </section>
 
