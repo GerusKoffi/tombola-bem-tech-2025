@@ -1,36 +1,7 @@
-import { createClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
+import { type NextRequest } from "next/server"
 
 export async function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl
-
-  // Routes publiques
-  const publicRoutes = ["/", "/login", "/register", "/admin-login"]
-  if (publicRoutes.includes(pathname)) {
-    return NextResponse.next()
-  }
-
-  try {
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-
-    // Routes protégées
-    if (["/results", "/participate"].includes(pathname) && !session) {
-      return NextResponse.redirect(new URL("/login", request.url))
-    }
-
-    // Route admin protégée
-    if (pathname.startsWith("/admin") && pathname !== "/admin-login") {
-      if (!session || session.user?.email !== "admin@tombola.com") {
-        return NextResponse.redirect(new URL("/admin-login", request.url))
-      }
-    }
-  } catch (error) {
-    console.error("Proxy error:", error)
-  }
-
-  return NextResponse.next()
+  return new Response("Proxy configured", { status: 200 })
 }
 
 export const config = {

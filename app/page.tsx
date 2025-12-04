@@ -187,13 +187,6 @@ export default function HomePage() {
             <PrizeCard icon="🎵" title="Abonnement Spotify 6 mois" number={3} />
             <PrizeCard icon="💬" title="Abonnement Snapchat+" number={4} />
             <PrizeCard icon="💄" title="Paquet beauté pour fille (Gloss, etc)" number={5} />
-            <PrizeCard icon="💐" title="Parfum de luxe" number={6} />
-            <PrizeCard icon="⌚" title="Montre élégante" number={7} />
-            <PrizeCard icon="👜" title="Accessoires mode" number={8} />
-            <PrizeCard icon="🎒" title="Sac à dos premium" number={9} />
-            <PrizeCard icon="🔋" title="Power bank" number={10} />
-            <PrizeCard icon="📱" title="Coque téléphone premium" number={11} />
-            <PrizeCard icon="🎁" title="Carte cadeau 100€" number={12} highlight />
             </div>
         </div>
       </section>
