@@ -1,12 +1,11 @@
 [build]
   command = "npm run build"
-  publish = ".next"
-  functions = "netlify/functions"
+  publish = "out"
 
 [build.environment]
   NEXT_PUBLIC_SUPABASE_URL = "https://mvoneztthtxwnxnnwtis.supabase.co"
   NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12b25lenR0aHR4d254bm53dGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4MjYxMjMsImV4cCI6MjA4MDQwMjEyM30.xtAwYRFWcW69ivuwebkb4GBv2NZBD9Bpm6K8rJ8d9FU"
-  SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12b25lenR0aHR4d254bm53dGlzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDgyNjEyMywiZXhwIjoyMDgwNDAyMTIzfQ.8sv7IgL9yM7vV9yAeFhjgbaXg0hUAPINPj88B-0c0ec"
+  SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12b25lenR0aHR4d254bm53dGlzIiwicm9zZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDgyNjEyMywiZXhwIjoyMDgwNDAyMTIzfQ.8sv7IgL9yM7vV9yAeFhjgbaXg0hUAPINPj88B-0c0ec"
   NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL = "https://tombola-bem-tech-2025.netlify.app/auth/callback"
 
 [[redirects]]
