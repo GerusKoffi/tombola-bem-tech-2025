@@ -1,667 +1,355 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/hooks/use-toast"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-interface Participant {
-  id: string
-  email: string
-  nom: string
-  prenom: string
-  classe: string
-  annee: string
-  numero: number
-  created_at: string
-  user_id: string
-}
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 interface DrawSettings {
-  id: number
   draw_date: string
   draw_time: string
-  updated_at: string
+  is_active: boolean
 }
 
-interface Winner {
+interface User {
+  id: string
+  email: string
+  nom?: string
+  prenom?: string
+  classe?: string
+  annee?: string
+}
+
+interface Ticket {
   id: string
   numero: number
   user_id: string
-  email: string
-  nom: string
-  prenom: string
+  winner: boolean
   lot?: string
-}
-
-interface Lot {
-  id: string
-  numero: number
-  nom: string
-  icon: string
+  drawn_at?: string
+  users?: User
 }
 
 export default function AdminDashboard() {
-  const { toast } = useToast()
   const supabase = createClient()
-
-  const [participants, setParticipants] = useState<Participant[]>([])
-  const [drawSettings, setDrawSettings] = useState<DrawSettings | null>(null)
-  const [drawDate, setDrawDate] = useState("")
-  const [drawTime, setDrawTime] = useState("")
-  const [winners, setWinners] = useState<Winner[]>([])
-  const [lots, setLots] = useState<Lot[]>([])
+  const [drawSettings, setDrawSettings] = useState<DrawSettings>({
+    draw_date: "",
+    draw_time: "",
+    is_active: false,
+  })
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [users, setUsers] = useState<{ [key: string]: User }>({})
   const [loading, setLoading] = useState(true)
-  const [newWinnerNumber, setNewWinnerNumber] = useState("")
+  const [drawnNumber, setDrawnNumber] = useState<number | null>(null)
   const [selectedLot, setSelectedLot] = useState("")
 
-  // Charger les données
   useEffect(() => {
-    fetchParticipants()
-    fetchDrawSettings()
-    fetchWinners()
-    fetchLots()
+    loadData()
   }, [])
 
-  const fetchParticipants = async () => {
+  const loadData = async () => {
     try {
-      const { data: tickets, error: ticketsError } = await supabase
+      setLoading(true)
+
+      // Charger les tickets
+      const { data: ticketsData, error: ticketsError } = await supabase
         .from("tickets")
-        .select("id, numero, user_id, created_at")
+        .select("*")
         .order("numero", { ascending: true })
 
       if (ticketsError) throw ticketsError
+      setTickets(ticketsData || [])
 
-      const formatted = await Promise.all(
-        (tickets || []).map(async (ticket) => {
-          const { data: profile, error } = await supabase
-            .from("profiles")
-            .select("email, nom, prenom, classe, annee")
-            .eq("id", ticket.user_id)
-            .single()
+      // Charger les utilisateurs
+      const { data: usersData, error: usersError } = await supabase
+        .from("profiles")
+        .select("id, email, nom, prenom, classe, annee")
 
-          if (error) {
-            console.error("Error fetching profile for", ticket.user_id, error)
-            return {
-              id: ticket.id,
-              email: "N/A",
-              nom: "N/A",
-              prenom: "N/A",
-              classe: "N/A",
-              annee: "N/A",
-              numero: ticket.numero,
-              created_at: ticket.created_at,
-              user_id: ticket.user_id,
-            }
-          }
+      if (usersError) throw usersError
 
-          return {
-            id: ticket.id,
-            email: profile?.email || "N/A",
-            nom: profile?.nom || "N/A",
-            prenom: profile?.prenom || "N/A",
-            classe: profile?.classe || "N/A",
-            annee: profile?.annee || "N/A",
-            numero: ticket.numero,
-            created_at: ticket.created_at,
-            user_id: ticket.user_id,
-          }
-        })
-      )
-
-      setParticipants(formatted)
-    } catch (error: any) {
-      console.error("Erreur:", error)
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les participants",
-        variant: "destructive",
+      const usersMap: { [key: string]: User } = {}
+      usersData?.forEach((user: User) => {
+        usersMap[user.id] = user
       })
+      setUsers(usersMap)
+
+      // Charger les paramètres de tirage depuis localStorage ou Supabase
+      const savedSettings = localStorage.getItem("drawSettings")
+      if (savedSettings) {
+        setDrawSettings(JSON.parse(savedSettings))
+      }
+    } catch (error) {
+      console.error("Erreur lors du chargement des données:", error)
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchDrawSettings = async () => {
-    try {
-      const { data, error } = await supabase.from("draw_settings").select("*").single()
-      if (data) {
-        setDrawSettings(data)
-        setDrawDate(data.draw_date || "")
-        setDrawTime(data.draw_time || "")
-      }
-    } catch (error) {
-      console.log("Pas de paramètres de tirage")
-    }
+  const saveDrawSettings = () => {
+    localStorage.setItem("drawSettings", JSON.stringify(drawSettings))
+    alert("Paramètres de tirage sauvegardés!")
   }
 
-  const fetchWinners = async () => {
-    try {
-      const { data: tickets, error } = await supabase
-        .from("tickets")
-        .select("id, numero, user_id, lot")
-        .eq("winner", true)
-
-      if (error) throw error
-
-      const formatted = await Promise.all(
-        (tickets || []).map(async (ticket) => {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("email, nom, prenom")
-            .eq("id", ticket.user_id)
-            .single()
-
-          return {
-            id: ticket.id,
-            numero: ticket.numero,
-            user_id: ticket.user_id,
-            email: profile?.email || "N/A",
-            nom: profile?.nom || "N/A",
-            prenom: profile?.prenom || "N/A",
-            lot: ticket.lot || "Non attribué",
-          }
-        })
-      )
-
-      setWinners(formatted)
-    } catch (error: any) {
-      console.error("Erreur:", error)
+  const drawRandomNumber = async () => {
+    if (tickets.length === 0) {
+      alert("Aucun ticket disponible")
+      return
     }
+
+    const undrawnTickets = tickets.filter((t) => !t.winner)
+    if (undrawnTickets.length === 0) {
+      alert("Tous les tickets ont déjà été tirés!")
+      return
+    }
+
+    const randomIndex = Math.floor(Math.random() * undrawnTickets.length)
+    const winningTicket = undrawnTickets[randomIndex]
+
+    setDrawnNumber(winningTicket.numero)
+
+    // Mettre à jour le ticket comme gagnant
+    const { error } = await supabase
+      .from("tickets")
+      .update({
+        winner: true,
+        drawn_at: new Date().toISOString(),
+        lot: selectedLot || null,
+      })
+      .eq("id", winningTicket.id)
+
+    if (error) {
+      console.error("Erreur lors de la mise à jour du ticket:", error)
+      return
+    }
+
+    // Recharger les données
+    loadData()
   }
 
-  const fetchLots = async () => {
-    try {
-      const { data, error } = await supabase.from("lots").select("*").order("numero")
-      if (error) throw error
-      setLots(data || [])
-    } catch (error: any) {
-      console.error("Erreur:", error)
+  const undoLastDraw = async () => {
+    if (drawnNumber === null) return
+
+    const ticketToUndo = tickets.find((t) => t.numero === drawnNumber)
+    if (!ticketToUndo) return
+
+    const { error } = await supabase
+      .from("tickets")
+      .update({
+        winner: false,
+        drawn_at: null,
+        lot: null,
+      })
+      .eq("id", ticketToUndo.id)
+
+    if (error) {
+      console.error("Erreur lors de l'annulation:", error)
+      return
     }
-  }
 
-  const updateDrawSettings = async () => {
-    try {
-      if (!drawDate || !drawTime) {
-        toast({
-          title: "Erreur",
-          description: "Veuillez remplir la date et l'heure",
-          variant: "destructive",
-        })
-        return
-      }
-
-      if (drawSettings) {
-        const { error } = await supabase
-          .from("draw_settings")
-          .update({
-            draw_date: drawDate,
-            draw_time: drawTime,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", drawSettings.id)
-
-        if (error) throw error
-      } else {
-        const { error } = await supabase.from("draw_settings").insert({
-          draw_date: drawDate,
-          draw_time: drawTime,
-        })
-
-        if (error) throw error
-      }
-
-      toast({
-        title: "Succès",
-        description: "Paramètres de tirage mis à jour",
-      })
-
-      fetchDrawSettings()
-    } catch (error: any) {
-      console.error("Erreur:", error)
-      toast({
-        title: "Erreur",
-        description: error.message,
-        variant: "destructive",
-      })
-    }
-  }
-
-  const addWinner = async () => {
-    try {
-      const number = parseInt(newWinnerNumber)
-
-      if (!number || number < 1 || number > 100) {
-        toast({
-          title: "Erreur",
-          description: "Veuillez entrer un numéro valide (1-100)",
-          variant: "destructive",
-        })
-        return
-      }
-
-      if (!selectedLot) {
-        toast({
-          title: "Erreur",
-          description: "Veuillez sélectionner un lot",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const lotName = lots.find((l) => l.numero.toString() === selectedLot)?.nom || null
-
-      const { error } = await supabase
-        .from("tickets")
-        .update({ winner: true, lot: lotName })
-        .eq("numero", number)
-
-      if (error) throw error
-
-      toast({
-        title: "Succès",
-        description: `Numéro ${number} marqué comme gagnant`,
-      })
-
-      setNewWinnerNumber("")
-      setSelectedLot("")
-      fetchWinners()
-      fetchParticipants()
-    } catch (error: any) {
-      console.error("Erreur:", error)
-      toast({
-        title: "Erreur",
-        description: error.message,
-        variant: "destructive",
-      })
-    }
-  }
-
-  const randomWinner = async () => {
-    try {
-      // Récupérer uniquement les numéros qui existent (choisis par les utilisateurs)
-      const allNumbers = participants.map((p) => p.numero)
-      const nonWinners = allNumbers.filter((n) => !winners.some((w) => w.numero === n))
-
-      if (nonWinners.length === 0) {
-        toast({
-          title: "Erreur",
-          description: "Tous les numéros disponibles sont déjà gagnants!",
-          variant: "destructive",
-        })
-        return
-      }
-
-      if (!selectedLot) {
-        toast({
-          title: "Erreur",
-          description: "Veuillez sélectionner un lot",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const randomIndex = Math.floor(Math.random() * nonWinners.length)
-      const winningNumber = nonWinners[randomIndex]
-      const lotName = lots.find((l) => l.numero.toString() === selectedLot)?.nom || null
-
-      const { error } = await supabase
-        .from("tickets")
-        .update({ winner: true, lot: lotName })
-        .eq("numero", winningNumber)
-
-      if (error) throw error
-
-      toast({
-        title: "🎉 Tirage au sort!",
-        description: `Le numéro gagnant est: ${winningNumber}`,
-      })
-
-      setSelectedLot("")
-      fetchWinners()
-      fetchParticipants()
-    } catch (error: any) {
-      console.error("Erreur:", error)
-      toast({
-        title: "Erreur",
-        description: error.message,
-        variant: "destructive",
-      })
-    }
-  }
-
-  const removeWinner = async (numero: number) => {
-    try {
-      const { error } = await supabase
-        .from("tickets")
-        .update({ winner: false, lot: null })
-        .eq("numero", numero)
-
-      if (error) throw error
-
-      toast({
-        title: "Succès",
-        description: `Numéro ${numero} retiré des gagnants`,
-      })
-
-      fetchWinners()
-      fetchParticipants()
-    } catch (error: any) {
-      console.error("Erreur:", error)
-      toast({
-        title: "Erreur",
-        description: error.message,
-        variant: "destructive",
-      })
-    }
+    setDrawnNumber(null)
+    setSelectedLot("")
+    loadData()
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Chargement...</p>
-      </div>
-    )
+    return <div className="p-8">Chargement...</div>
   }
 
+  const winners = tickets.filter((t) => t.winner)
+  const totalTickets = tickets.length
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f59e0b]/5 to-[#0078b7]/5 p-8">
+    <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8">Dashboard Admin - Tombola</h1>
+        <h1 className="text-4xl font-bold mb-8">🎰 Tableau de Bord Admin</h1>
 
-        <Tabs defaultValue="participants" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="participants">Participants ({participants.length})</TabsTrigger>
-            <TabsTrigger value="draw">Tirage au Sort</TabsTrigger>
-            <TabsTrigger value="winners">Gagnants ({winners.length})</TabsTrigger>
-            <TabsTrigger value="settings">Paramètres</TabsTrigger>
-          </TabsList>
+        {/* Paramètres de tirage */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>⚙️ Paramètres de Tirage</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="draw_date">Date du tirage</Label>
+                <Input
+                  id="draw_date"
+                  type="date"
+                  value={drawSettings.draw_date}
+                  onChange={(e) =>
+                    setDrawSettings({ ...drawSettings, draw_date: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="draw_time">Heure du tirage</Label>
+                <Input
+                  id="draw_time"
+                  type="time"
+                  value={drawSettings.draw_time}
+                  onChange={(e) =>
+                    setDrawSettings({ ...drawSettings, draw_time: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <Button onClick={saveDrawSettings} className="w-full">
+              Sauvegarder les paramètres
+            </Button>
+          </CardContent>
+        </Card>
 
-          {/* Onglet Participants */}
-          <TabsContent value="participants">
-            <Card>
-              <CardHeader>
-                <CardTitle>Liste des Participants</CardTitle>
-                <CardDescription>
-                  {participants.length} participant(s) inscrit(s)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table className="text-sm">
-                    <TableHeader>
-                      <TableRow className="bg-gray-100">
-                        <TableHead className="font-bold">Numéro</TableHead>
-                        <TableHead className="font-bold">Nom</TableHead>
-                        <TableHead className="font-bold">Prénom</TableHead>
-                        <TableHead className="font-bold">Email</TableHead>
-                        <TableHead className="font-bold">Classe</TableHead>
-                        <TableHead className="font-bold">Année</TableHead>
-                        <TableHead className="font-bold text-center">Statut</TableHead>
+        {/* Section Tirage */}
+        <Card className="mb-8 border-2 border-blue-500">
+          <CardHeader>
+            <CardTitle>🎲 Tirage au Sort</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="lot">Lot à attribuer</Label>
+              <Input
+                id="lot"
+                placeholder="Ex: iPhone, 100€, Voyage..."
+                value={selectedLot}
+                onChange={(e) => setSelectedLot(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-4">
+              <Button onClick={drawRandomNumber} className="flex-1 bg-green-600 hover:bg-green-700">
+                Tirer un numéro
+              </Button>
+              <Button onClick={undoLastDraw} variant="outline" className="flex-1">
+                Annuler le dernier tirage
+              </Button>
+            </div>
+
+            {drawnNumber !== null && (
+              <div className="bg-yellow-100 border-2 border-yellow-500 p-4 rounded text-center">
+                <p className="text-sm text-gray-600">Numéro tiré au sort:</p>
+                <p className="text-5xl font-bold text-yellow-600">{drawnNumber}</p>
+                {selectedLot && <p className="text-lg mt-2">🎁 Lot: {selectedLot}</p>}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Statistiques */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Total Tickets</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-blue-600">{totalTickets}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Gagnants</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-green-600">{winners.length}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Restants</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-orange-600">{totalTickets - winners.length}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Liste des gagnants */}
+        <Card>
+          <CardHeader>
+            <CardTitle>👑 Gagnants du Tirage</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {winners.length === 0 ? (
+              <p className="text-gray-500">Aucun gagnant pour le moment</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Numéro</TableHead>
+                    <TableHead>Nom</TableHead>
+                    <TableHead>Classe</TableHead>
+                    <TableHead>Lot</TableHead>
+                    <TableHead>Date de tirage</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {winners.map((ticket) => {
+                    const user = users[ticket.user_id]
+                    return (
+                      <TableRow key={ticket.id} className="bg-green-50">
+                        <TableCell className="font-bold text-lg">{ticket.numero}</TableCell>
+                        <TableCell>{user ? `${user.prenom} ${user.nom}` : "N/A"}</TableCell>
+                        <TableCell>{user?.classe || "N/A"}</TableCell>
+                        <TableCell>{ticket.lot || "-"}</TableCell>
+                        <TableCell>
+                          {ticket.drawn_at
+                            ? new Date(ticket.drawn_at).toLocaleString("fr-FR")
+                            : "-"}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {participants.map((p) => (
-                        <TableRow key={p.id} className="hover:bg-gray-50">
-                          <TableCell className="font-bold text-lg text-blue-600">{p.numero}</TableCell>
-                          <TableCell className="font-medium">{p.nom}</TableCell>
-                          <TableCell>{p.prenom}</TableCell>
-                          <TableCell className="text-xs text-gray-600 max-w-xs truncate" title={p.email}>
-                            {p.email}
-                          </TableCell>
-                          <TableCell className="text-sm">{p.classe}</TableCell>
-                          <TableCell className="text-sm">{p.annee}</TableCell>
-                          <TableCell className="text-center">
-                            {winners.some((w) => w.numero === p.numero) ? (
-                              <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
-                                🎉 Gagnant
-                              </span>
-                            ) : (
-                              <span className="inline-block px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">
-                                En attente
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-                {/* Carte résumé */}
-                <div className="grid grid-cols-3 gap-4 mt-6">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <p className="text-gray-600 text-sm">Total Participants</p>
-                      <p className="text-2xl font-bold text-blue-600">{participants.length}</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <p className="text-gray-600 text-sm">Gagnants</p>
-                      <p className="text-2xl font-bold text-green-600">{winners.length}</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <p className="text-gray-600 text-sm">En attente</p>
-                      <p className="text-2xl font-bold text-orange-600">{participants.length - winners.length}</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Onglet Tirage au Sort */}
-          <TabsContent value="draw">
-            <Card>
-              <CardHeader>
-                <CardTitle>Gestion du Tirage au Sort</CardTitle>
-                <CardDescription>Sélectionnez les numéros gagnants et les lots</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Tirage manuel */}
-                  <div className="space-y-4 p-4 border rounded-lg">
-                    <h3 className="font-semibold text-lg">Tirage Manual</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <Label htmlFor="lot-select">Sélectionnez un lot</Label>
-                        <Select value={selectedLot} onValueChange={setSelectedLot}>
-                          <SelectTrigger id="lot-select">
-                            <SelectValue placeholder="Choisir un lot" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {lots.map((lot) => (
-                              <SelectItem key={lot.id} value={lot.numero.toString()}>
-                                {lot.icon} {lot.nom}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="winner-number">Numéro gagnant</Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="winner-number"
-                            type="number"
-                            min="1"
-                            max="100"
-                            placeholder="Entrez un numéro (1-100)"
-                            value={newWinnerNumber}
-                            onChange={(e) => setNewWinnerNumber(e.target.value)}
-                          />
-                          <Button onClick={addWinner} disabled={!selectedLot || !newWinnerNumber}>
-                            Ajouter
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tirage automatique */}
-                  <div className="space-y-4 p-4 border rounded-lg bg-gradient-to-br from-purple-50 to-blue-50">
-                    <h3 className="font-semibold text-lg">🎲 Tirage Aléatoire</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <Label htmlFor="random-lot">Sélectionnez un lot</Label>
-                        <Select value={selectedLot} onValueChange={setSelectedLot}>
-                          <SelectTrigger id="random-lot">
-                            <SelectValue placeholder="Choisir un lot" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {lots.map((lot) => (
-                              <SelectItem key={lot.id} value={lot.numero.toString()}>
-                                {lot.icon} {lot.nom}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        Tire aléatoirement parmi les numéros choisis par les utilisateurs
-                      </p>
-                      <Button
-                        onClick={randomWinner}
-                        className="w-full bg-purple-600 hover:bg-purple-700"
-                        disabled={!selectedLot}
-                      >
-                        Lancer le Tirage Aléatoire
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Onglet Gagnants */}
-          <TabsContent value="winners">
-            <Card>
-              <CardHeader>
-                <CardTitle>Numéros Gagnants</CardTitle>
-                <CardDescription>{winners.length} numéro(s) gagnant(s)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {winners.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">Aucun gagnant pour le moment</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table className="text-sm">
-                      <TableHeader>
-                        <TableRow className="bg-green-50">
-                          <TableHead className="font-bold">Numéro</TableHead>
-                          <TableHead className="font-bold">Nom</TableHead>
-                          <TableHead className="font-bold">Prénom</TableHead>
-                          <TableHead className="font-bold">Email</TableHead>
-                          <TableHead className="font-bold">Lot Attribué</TableHead>
-                          <TableHead className="font-bold text-center">Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {winners.map((w) => (
-                          <TableRow key={w.id} className="bg-green-50 hover:bg-green-100">
-                            <TableCell className="font-bold text-lg">🎉 {w.numero}</TableCell>
-                            <TableCell className="font-medium">{w.nom}</TableCell>
-                            <TableCell>{w.prenom}</TableCell>
-                            <TableCell className="text-xs text-gray-600 max-w-xs truncate" title={w.email}>
-                              {w.email}
-                            </TableCell>
-                            <TableCell className="font-semibold">
-                              {lots.find((l) => l.nom === w.lot)?.icon} {w.lot}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Button
-                                onClick={() => removeWinner(w.numero)}
-                                variant="destructive"
-                                size="sm"
-                              >
-                                Retirer
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Onglet Paramètres */}
-          <TabsContent value="settings">
-            <Card>
-              <CardHeader>
-                <CardTitle>Paramètres de la Tombola</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4 p-4 border rounded-lg">
-                  <h3 className="font-semibold text-lg">📅 Date et Heure du Tirage</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="draw-date">Date du tirage</Label>
-                      <Input
-                        id="draw-date"
-                        type="date"
-                        value={drawDate}
-                        onChange={(e) => setDrawDate(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="draw-time">Heure du tirage</Label>
-                      <Input
-                        id="draw-time"
-                        type="time"
-                        value={drawTime}
-                        onChange={(e) => setDrawTime(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <Button onClick={updateDrawSettings} className="w-full">
-                    Enregistrer les Paramètres
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <p className="text-sm text-gray-600">Participants inscrits</p>
-                      <p className="text-3xl font-bold">{participants.length}</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="pt-6">
-                      <p className="text-sm text-gray-600">Gagnants désignés</p>
-                      <p className="text-3xl font-bold text-green-600">{winners.length}</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* Liste complète des tickets */}
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>📋 Tous les Tickets</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Numéro</TableHead>
+                  <TableHead>Participant</TableHead>
+                  <TableHead>Classe</TableHead>
+                  <TableHead>Statut</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tickets.map((ticket) => {
+                  const user = users[ticket.user_id]
+                  return (
+                    <TableRow
+                      key={ticket.id}
+                      className={ticket.winner ? "bg-green-100" : ""}
+                    >
+                      <TableCell className="font-bold">{ticket.numero}</TableCell>
+                      <TableCell>{user ? `${user.prenom} ${user.nom}` : "N/A"}</TableCell>
+                      <TableCell>{user?.classe || "N/A"}</TableCell>
+                      <TableCell>
+                        {ticket.winner ? (
+                          <span className="bg-green-200 text-green-800 px-3 py-1 rounded">
+                            ✅ Gagnant
+                          </span>
+                        ) : (
+                          <span className="bg-gray-200 text-gray-800 px-3 py-1 rounded">
+                            En attente
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

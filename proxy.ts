@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Routes publiques
@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
       }
     }
   } catch (error) {
-    console.error("Middleware error:", error)
+    console.error("Proxy error:", error)
   }
 
   return NextResponse.next()

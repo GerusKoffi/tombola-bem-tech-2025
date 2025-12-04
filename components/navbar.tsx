@@ -58,6 +58,9 @@ export function Navbar() {
                 <Link href="/results" className="text-sm font-medium hover:text-primary transition">
                   Résultats
                 </Link>
+                <Link href="/admin" className="text-sm font-medium hover:text-primary transition">
+                  Admin
+                </Link>
                 <Button onClick={handleLogout} variant="outline" className="text-sm">
                   Déconnexion
                 </Button>
@@ -109,6 +112,13 @@ export function Navbar() {
                   onClick={() => setIsOpen(false)}
                 >
                   Résultats
+                </Link>
+                <Link
+                  href="/admin"
+                  className="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-50 transition"
+                  onClick={() => setIsOpen(false)}
+                >
+                  Admin
                 </Link>
                 <button
                   onClick={() => {

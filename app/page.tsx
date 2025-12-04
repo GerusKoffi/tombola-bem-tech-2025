@@ -1,15 +1,80 @@
 "use client"
 
 import type React from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
 import { Navbar } from "@/components/navbar"
 import { Countdown3D } from "@/components/countdown-3d"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { useAuth } from "@/hooks/use-auth"
 import Link from "next/link"
 import { ArrowRight, Trophy, Ticket, Clock, Gift, ChevronUp } from "lucide-react"
 
+interface DrawSettings {
+  draw_date: string
+  draw_time: string
+  is_active: boolean
+}
+
+interface CountdownTime {
+  days: number
+  hours: number
+  minutes: number
+  seconds: number
+}
+
 export default function HomePage() {
+  const router = useRouter()
+  const { user, loading } = useAuth()
+  const [drawSettings, setDrawSettings] = useState<DrawSettings | null>(null)
+  const [countdown, setCountdown] = useState<CountdownTime>({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+  })
+
+  useEffect(() => {
+    // Charger les paramètres de tirage depuis localStorage
+    const savedSettings = localStorage.getItem("drawSettings")
+    if (savedSettings) {
+      setDrawSettings(JSON.parse(savedSettings))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!drawSettings) return
+
+    const timer = setInterval(() => {
+      const targetDateTime = new Date(
+        `${drawSettings.draw_date}T${drawSettings.draw_time}`
+      ).getTime()
+      const now = new Date().getTime()
+      const difference = targetDateTime - now
+
+      if (difference > 0) {
+        setCountdown({
+          days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+          hours: Math.floor(
+            (difference / (1000 * 60 * 60)) % 24
+          ),
+          minutes: Math.floor((difference / 1000 / 60) % 60),
+          seconds: Math.floor((difference / 1000) % 60),
+        })
+      } else {
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+      }
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [drawSettings])
+
+  if (loading) {
+    return <div className="p-8">Chargement...</div>
+  }
+
   return (
     <div className="min-h-screen">
       <Navbar />
@@ -168,6 +233,86 @@ export default function HomePage() {
 
       {/* Back to Top Button */}
       <BackToTop />
+
+      {/* Countdown */}
+      {drawSettings && (
+        <Card className="bg-white shadow-2xl mb-12 overflow-hidden">
+          <CardContent className="p-8">
+            <h2 className="text-2xl font-bold text-center mb-6">
+              ⏳ Tirage au sort dans...
+            </h2>
+            <div className="grid grid-cols-4 gap-4">
+              {[
+                { label: "Jours", value: countdown.days },
+                { label: "Heures", value: countdown.hours },
+                { label: "Minutes", value: countdown.minutes },
+                { label: "Secondes", value: countdown.seconds },
+              ].map((item) => (
+                <div key={item.label} className="text-center">
+                  <div className="bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg p-4 mb-2">
+                    <p className="text-4xl font-black text-white">
+                      {String(item.value).padStart(2, "0")}
+                    </p>
+                  </div>
+                  <p className="text-gray-600 font-semibold">{item.label}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-gray-600 mt-6">
+              Tirage le {new Date(`${drawSettings.draw_date}T${drawSettings.draw_time}`).toLocaleString("fr-FR")}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* CTA Buttons */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        {!user ? (
+          <>
+            <Link href="/register" className="block">
+              <Button className="w-full bg-green-500 hover:bg-green-600 text-white py-6 text-lg font-bold">
+                📝 S'inscrire
+              </Button>
+            </Link>
+            <Link href="/login" className="block">
+              <Button className="w-full bg-blue-500 hover:bg-blue-600 text-white py-6 text-lg font-bold">
+                🔓 Se connecter
+              </Button>
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link href="/participate" className="block">
+              <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white py-6 text-lg font-bold">
+                🎲 Participer
+              </Button>
+            </Link>
+            <Link href="/results" className="block">
+              <Button className="w-full bg-purple-500 hover:bg-purple-600 text-white py-6 text-lg font-bold">
+                📊 Résultats
+              </Button>
+            </Link>
+          </>
+        )}
+        <Link href="/admin" className="block">
+          <Button className="w-full bg-red-500 hover:bg-red-600 text-white py-6 text-lg font-bold">
+            ⚙️ Admin
+          </Button>
+        </Link>
+      </div>
+
+      {/* Info Card */}
+      <Card className="bg-white shadow-2xl">
+        <CardContent className="p-8">
+          <h3 className="text-2xl font-bold mb-4">ℹ️ Comment participer?</h3>
+          <ol className="space-y-3 text-gray-700">
+            <li>✅ <strong>Inscrivez-vous</strong> sur le site</li>
+            <li>✅ <strong>Choisissez un numéro</strong> de 1 à 100</li>
+            <li>✅ <strong>Attendez le tirage</strong> au sort</li>
+            <li>✅ <strong>Gagnez des lots</strong> fabuleux!</li>
+          </ol>
+        </CardContent>
+      </Card>
     </div>
   )
 }
