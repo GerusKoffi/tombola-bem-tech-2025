@@ -1,97 +1,78 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { NumberGrid } from "@/components/number-grid"
-import { Eye, EyeOff } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
+import { Card } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { toast } = useToast()
-  const [loading, setLoading] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [occupiedNumbers, setOccupiedNumbers] = useState<number[]>([])
-  const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
-
   const [formData, setFormData] = useState({
-    prenom: "",
-    nom: "",
     email: "",
-    classe: "",
-    annee: "",
     password: "",
     confirmPassword: "",
+    nom: "",
+    prenom: "",
+    classe: "",
+    annee: "",
   })
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    fetchOccupiedNumbers()
-  }, [])
-
-  const fetchOccupiedNumbers = async () => {
-    const supabase = createClient()
-    const { data, error } = await supabase.from("tickets").select("numero")
-
-    console.log("[v0] Fetched occupied numbers:", { data, error })
-
-    if (!error && data) {
-      setOccupiedNumbers(data.map((t) => t.numero))
-    }
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    })
+    setError(null)
+    setSuccess(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("[v0] Register attempt:", { ...formData, password: "***", confirmPassword: "***" })
-
-    if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: "Erreur",
-        description: "Les mots de passe ne correspondent pas",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (formData.password.length < 6) {
-      toast({
-        title: "Erreur",
-        description: "Le mot de passe doit contenir au moins 6 caractères",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!selectedNumber) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez sélectionner un numéro",
-        variant: "destructive",
-      })
-      return
-    }
-
+    setError(null)
+    setSuccess(null)
     setLoading(true)
 
     try {
-      const supabase = createClient()
-      console.log("[v0] Creating user account...")
+      // Validation
+      if (formData.password !== formData.confirmPassword) {
+        setError("Les mots de passe ne correspondent pas")
+        setLoading(false)
+        return
+      }
 
-      // Désactiver la vérification d'email pour le développement
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      if (formData.password.length < 6) {
+        setError("Le mot de passe doit contenir au moins 6 caractères")
+        setLoading(false)
+        return
+      }
+
+      const supabase = createClient()
+
+      // Vérifier si l'email existe déjà
+      const { data: existingUser } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("email", formData.email)
+        .single()
+
+      if (existingUser) {
+        setError("Cet email est déjà utilisé. Veuillez vous connecter.")
+        setLoading(false)
+        return
+      }
+
+      // Créer le compte
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
-          emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/results`,
           data: {
             nom: formData.nom,
             prenom: formData.prenom,
@@ -101,226 +82,152 @@ export default function RegisterPage() {
         },
       })
 
-      console.log("[v0] Sign up response:", { authData, authError })
-
-      if (authError) throw authError
-
-      if (authData.user) {
-        console.log("[v0] Creating ticket for number:", selectedNumber)
-        
-        // Créer le ticket avec un délai pour laisser le trigger s'exécuter
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        const { data: ticketData, error: ticketError } = await supabase
-          .from("tickets")
-          .insert({
-            user_id: authData.user.id,
-            numero: selectedNumber,
-          })
-          .select()
-
-        console.log("[v0] Ticket creation response:", { ticketData, ticketError })
-
-        if (ticketError) throw ticketError
-
-        toast({
-          title: "Inscription réussie !",
-          description: "Vous pouvez maintenant vous connecter",
-        })
-
-        console.log("[v0] Redirecting to login page")
-        setTimeout(() => {
-          router.push("/login")
-        }, 1500)
+      if (signUpError) {
+        if (signUpError.message.includes("already registered")) {
+          setError("Cet email est déjà enregistré. Veuillez vous connecter.")
+        } else {
+          setError(signUpError.message || "Erreur lors de l'inscription")
+        }
+        setLoading(false)
+        return
       }
-    } catch (error: any) {
-      console.error("[v0] Registration error:", error)
-      toast({
-        title: "Erreur",
-        description: error.message || "Une erreur est survenue",
-        variant: "destructive",
-      })
+
+      if (data.user) {
+        // Créer le profil
+        const { error: profileError } = await supabase.from("profiles").insert([
+          {
+            id: data.user.id,
+            email: formData.email,
+            nom: formData.nom,
+            prenom: formData.prenom,
+            classe: formData.classe,
+            annee: formData.annee,
+          },
+        ])
+
+        if (profileError && profileError.code !== "23505") {
+          console.error("Erreur profil:", profileError)
+        }
+
+        setSuccess("Inscription réussie! Redirection...")
+        setTimeout(() => router.push("/login"), 2000)
+      }
+    } catch (err: any) {
+      console.error("Erreur:", err)
+      setError(err.message || "Une erreur est survenue")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0078b7]/5 to-[#ff6b35]/5 py-8">
-      <div className="container mx-auto px-4 max-w-6xl">
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-2 mb-4">
-            <div className="h-10 w-10 rounded-full bg-[#0078b7] flex items-center justify-center text-white font-bold">
-              BT
-            </div>
-            <span className="text-xl font-semibold">BEM TECH 2025</span>
-          </Link>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <div className="p-6 sm:p-8">
+          <h1 className="text-3xl font-bold text-center mb-6">S'inscrire</h1>
+
+          {error && (
+            <Alert className="mb-4 bg-red-50 border-red-200">
+              <AlertDescription className="text-red-800">
+                ❌ {error}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {success && (
+            <Alert className="mb-4 bg-green-50 border-green-200">
+              <AlertDescription className="text-green-800">
+                ✅ {success}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="email"
+              name="email"
+              placeholder="Email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              name="prenom"
+              placeholder="Prénom"
+              value={formData.prenom}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              name="nom"
+              placeholder="Nom"
+              value={formData.nom}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <select
+              name="classe"
+              value={formData.classe}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Sélectionner une classe</option>
+              <option value="ITN">ITN</option>
+              <option value="SIT">SIT</option>
+            </select>
+            <select
+              name="annee"
+              value={formData.annee}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Sélectionner une année</option>
+              <option value="1ère année">1ère année</option>
+              <option value="2ème année">2ème année</option>
+              <option value="3ème année">3ème année</option>
+            </select>
+            <input
+              type="password"
+              name="password"
+              placeholder="Mot de passe"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="password"
+              name="confirmPassword"
+              placeholder="Confirmer le mot de passe"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? "Inscription en cours..." : "S'inscrire"}
+            </Button>
+          </form>
+
+          <p className="text-center text-sm mt-4">
+            Vous avez déjà un compte?{" "}
+            <a href="/login" className="text-blue-600 hover:underline">
+              Se connecter
+            </a>
+          </p>
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl md:text-3xl">Inscription à la Tombola</CardTitle>
-            <CardDescription>Remplissez le formulaire et choisissez votre numéro porte-bonheur</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-8">
-              {/* Section 1: Personal Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-l-4 border-[#0078b7] pl-3">1. Informations Personnelles</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="prenom">Prénom *</Label>
-                    <Input
-                      id="prenom"
-                      required
-                      value={formData.prenom}
-                      onChange={(e) => setFormData({ ...formData, prenom: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="nom">Nom *</Label>
-                    <Input
-                      id="nom"
-                      required
-                      value={formData.nom}
-                      onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      required
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="classe">Classe *</Label>
-                    <Select
-                      required
-                      value={formData.classe}
-                      onValueChange={(value) => setFormData({ ...formData, classe: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionnez votre classe" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ITN">ITN</SelectItem>
-                        <SelectItem value="SIT">SIT</SelectItem>
-                        <SelectItem value="Licence">Licence</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="annee">Année *</Label>
-                    <Select
-                      required
-                      value={formData.annee}
-                      onValueChange={(value) => setFormData({ ...formData, annee: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Sélectionnez votre année" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1ère année">1ère année</SelectItem>
-                        <SelectItem value="2ème année">2ème année</SelectItem>
-                        <SelectItem value="3ème année">3ème année</SelectItem>
-                        <SelectItem value="4ème année">4ème année</SelectItem>
-                        <SelectItem value="5ème année">5ème année</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 2: Security */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-l-4 border-[#0078b7] pl-3">2. Sécurité</h3>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Mot de passe *</Label>
-                    <div className="relative">
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        required
-                        minLength={6}
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
-                    <div className="relative">
-                      <Input
-                        id="confirmPassword"
-                        type={showConfirmPassword ? "text" : "password"}
-                        required
-                        minLength={6}
-                        value={formData.confirmPassword}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            confirmPassword: e.target.value,
-                          })
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Number Selection */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold border-l-4 border-[#0078b7] pl-3">3. Choisissez votre numéro</h3>
-                <NumberGrid
-                  selectedNumber={selectedNumber}
-                  onSelectNumber={setSelectedNumber}
-                  occupiedNumbers={occupiedNumbers}
-                />
-                {selectedNumber && (
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-green-800 font-medium">Numéro sélectionné : {selectedNumber}</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <Button type="submit" size="lg" disabled={loading}>
-                  {loading ? "Inscription en cours..." : "Valider l'inscription"}
-                </Button>
-                <div className="text-center text-sm">
-                  Vous avez déjà un compte ?{" "}
-                  <Link href="/login" className="text-[#0078b7] hover:underline font-medium">
-                    Se connecter
-                  </Link>
-                </div>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+      </Card>
     </div>
   )
 }
